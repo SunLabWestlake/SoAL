@@ -1,0 +1,2 @@
+# SoAL
+Social Animal Labeler
