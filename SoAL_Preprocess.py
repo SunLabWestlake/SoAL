@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Stage 1: Pre-processing
+Step 1: Pre-processing
+    scale(px/mm) and config information
     ROI segmentation
     calc background
-    input meta information
+    binarization threshold
 Author: Jing Ning @ SunLab
 """
 
@@ -13,8 +14,6 @@ import cv2
 from SoAL_UI import InputExpInfoUI, InputRoiInfoUI, InputBgInfoUI
 from SoAL_Utils import load_dict, save_dict, find_file
 from SoAL_Constants import *
-
-NEED_VIDEO_ALIGN = False
 
 def rename_video_t(video):
     if video.endswith("_t.avi"):
@@ -33,7 +32,7 @@ def get_video_in_dir(video_dir):
         return video
     return os.path.join(video_dir, f + ".avi")
 
-def preprocess(video):
+def preprocess(video, replace):
     print("[1.1] frame_align...", video)
     if os.path.isdir(video):
         video = get_video_in_dir(video)
@@ -45,16 +44,14 @@ def preprocess(video):
         cap.release()
     else:
         cap = cv2.VideoCapture(video)
-        if NEED_VIDEO_ALIGN:
-            os.system("start cmd /K %EXP_CODE_ROOT%\\tools\\frame_align.exe -i " + video)
-        info = update_meta_info(video, cap)
+        info = {} if replace else update_meta_info(video, cap)
         input_meta_info(video, cap, info)
         cap.release()
     return video
 
 def update_meta_info(video, cap):
     print("[1.3] update_meta_info...", video)
-    meta = video.replace(".avi", "_meta.txt")
+    meta = video.replace(".avi", "_config.json")
     if not os.path.exists(meta):
         return {}
     info = load_dict(meta)
@@ -63,7 +60,7 @@ def update_meta_info(video, cap):
     return info
 
 def update_male_day(video):
-    meta = video.replace(".avi", "_meta.txt")
+    meta = video.replace(".avi", "_config.json")
     if not os.path.exists(meta):
         return
     info = load_dict(meta)
@@ -75,7 +72,7 @@ def update_male_day(video):
         # roi["male_date"] = day_add_s(info["exp_date"], -roi["male_days"])
         print(roi["male_date"], roi["male_days"])
         # di = os.path.join(parent, str(i))
-        # for f in find_file(di, "meta.txt"):
+        # for f in find_file(di, "config.json"):
         #     print(f)
         #     finfo = load_dict(os.path.join(di, f))
         #     finfo["ROI"]["male_date"] = roi["male_date"]
@@ -86,7 +83,7 @@ def update_male_day(video):
 
 def input_meta_info(video, cap, info=None):
     print("[1.2] input_meta_info...", video)
-    meta = video.replace(".avi", "_meta.txt")
+    meta = video.replace(".avi", "_config.json")
     # if os.path.exists(meta) and os.path.getsize(meta) > 0:
     #     return False
 
@@ -98,7 +95,7 @@ def input_meta_info(video, cap, info=None):
     print(static_info)
 
     print("input_exp_info...", video)
-    # FEAT_SCALE, AREA_RANGE, temperature, female_date, female_days
+    # SCALE, AREA_RANGE, temperature, female_date, female_days
     ui_exp = InputExpInfoUI("input_exp_info", (9, 8), cap, static_info)
     ui_exp.show()
 
@@ -126,7 +123,7 @@ def get_video_static_info(video, cap):
     info["VERSION"] = VERSION
     info["FPS"] = FPS
     info["ROUND_ARENA"] = ROUND_ARENA
-    info["MODEL_FOLDER"] = MODEL_FOLDER
+    info["MODEL_FOLDER"] = MODEL_CONFIG
 
     log = video.replace(".avi", ".log")
     if not os.path.exists(video):
@@ -170,7 +167,7 @@ def get_video_static_info(video, cap):
 
 if __name__ == '__main__':
     print("[0] preprocess...")
-    preprocess(sys.argv[1])
+    preprocess(sys.argv[1], replace=True)
     # update_male_day(sys.argv[1])
     # from functools import cmp_to_key
     # args = sys.argv[1:]

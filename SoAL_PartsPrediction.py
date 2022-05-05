@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Stage 3: Key points detection
+Step 3: Parts prediction
 Author: Jing Ning @ SunLab
 """
 
 import time
 import numpy as np
-from SoAL_Constants import MODEL_FOLDER, PRINT_FRAME
+from SoAL_Constants import MODEL_CONFIG, PRINT_FRAME, BATCH_SIZE
 
 """
 Queue pack:
@@ -23,37 +23,41 @@ class PredictParts(object):
         self._idx = i
         self.stop = False
         self._task_q_l = {}
-        self.init_pred_model() #TEST:NEED_PRED
+        self.init_pred_model()
 
     def init_pred_model(self):
-        from hrnet import predict
-        self._model = predict.PredictModel(MODEL_FOLDER)
+        from hrnet import HRNet_model
+        self._model = HRNet_model.HRNetModel(MODEL_CONFIG)
 
     def append_new_task(self, pack):
-        from multiprocessing import Process, Queue
+        # from multiprocessing import Process, Queue
+        from queue import Queue
+        from threading import Thread
+
         task_id, video = pack
         q = Queue()
         self._task_q_l[task_id] = q
-        from SoAL_IDAssign import IdAssign  # NOTE: diff
-        print("[predict_parts] new task %d %s" % (task_id, video))
-        rs_p = Process(target=IdAssign.process, args=(video, task_id, q))  # copy instance
+        from SoAL_WriteKpt import WriteKpt
+        print("[PartsPred] new task %d %s" % (task_id, video))
+        rs_p = Thread(target=WriteKpt.process, args=(video, task_id, q))  # copy instance
         rs_p.start()
 
     def end_task(self, task_id):
         self._task_q_l[task_id].put(None)
 
     def predict_loop(self):
-        print("[predict_parts%d] loop..."%self._idx)
+        print("[PartsPred %d] loop..." % self._idx)
         count, n = 0, 0
         last_ts = time.time()
         while not self.stop:
-            l = self._pred_q.qsize()
-            if not l:
-                l = 1
-                # print("q empty")
+            batch = self._pred_q.qsize()
+            if not batch:
+                batch = 1
+            if batch > BATCH_SIZE:
+                batch = BATCH_SIZE
             pack_l = []
             img_l = []
-            for i in range(l):
+            for i in range(batch):
                 pack = self._pred_q.get()
                 task_id = pack[PACK_TASK_ID]
                 if task_id not in self._task_q_l:
@@ -71,7 +75,7 @@ class PredictParts(object):
                 continue
             # for i, img in enumerate(img_l):
             #     print("%d %s"%(i,img.shape))
-            ypk, scmap = self._model.pred_img_batch(img_l)
+            ypk, scmap = self._model.kpt_detect_batch(img_l)
             # ypk = np.zeros((3, 5, len(img_l))) #TEST:NEED_PRED
             # ypk: (3,5,n)  scmap: (n,8,8,5)
             for i, img in enumerate(img_l):
@@ -80,19 +84,18 @@ class PredictParts(object):
                 task_id = pack[PACK_TASK_ID]
                 reg = pack[PACK_REG]
                 # if pack[PACK_FRAME] >=0 and pack[PACK_ROI_I]==0:
-                #     plot_ego("img/img%06d%08d.jpg" % (pack[PACK_FRAME], i), pack[PACK_IMG], np.array(ypk[:, :, i]))  #TEST:PLOT_EGO
+                #     plot_ego("temp/img%06d%08d.jpg" % (pack[PACK_FRAME], i), pack[PACK_IMG], np.array(ypk[:, :, i]))  #TEST:PLOT_EGO
                 points = rotate_back_points(ypk[:, :, i], reg[REG_CENTER], reg[REG_ORIENT90], img.shape)
                 # points: (3,5)
                 self._task_q_l[task_id].put([pack[PACK_ROI_I], pack[PACK_FRAME], reg, pack[PACK_REG_N], np.array(points).flatten()])
-            count += l
+            count += batch
             n += 1
-            if count >= PRINT_FRAME*5:
-                # print("[predict_parts] pred_img_batch: %f/%d" % (prof_t, prof_c))
+            if count >= PRINT_FRAME:
+                # print("[PartsPred] kpt_detect_batch: %f/%d" % (prof_t, prof_c))
                 ts = time.time()
                 d_ts = ts - last_ts
                 last_ts = ts
-                print("[predict_parts%d] (%d/%d)fly/q %.2fs %.2ffly/s" % (self._idx, count, n, d_ts, count/d_ts))
-                # profile: 1800fly/s = tasks(4)*avg_fps(15)*rois(15)*2
+                print("[PartsPred %d] queue(%d/%d fly/q), interval(%.2fs), speed(%.2ffly/s)" % (self._idx, count, n, d_ts, count/d_ts))
                 count, n = 0, 0
 
     @staticmethod
@@ -148,6 +151,6 @@ def plot_ego(name, img, points):
     plt.plot(xs[1:5:3], ys[1:5:3], 0.5, "b")#1,4
     plt.scatter(xs, ys, c="rgbkw")
     s = img.shape
-    plt.xlim((0, s[0]))
-    plt.ylim((s[1], 0))
+    plt.xlim((0, s[1]))
+    plt.ylim((s[0], 0))
     plt.savefig(name)

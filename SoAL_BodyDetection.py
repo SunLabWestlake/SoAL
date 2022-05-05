@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Stage 2: Region segmentation
+Step 2: Body detection
 Author: Jing Ning @ SunLab
 """
 
@@ -12,13 +12,12 @@ from scipy import ndimage
 import numpy as np
 
 from SoAL_Utils import load_dict
-from SoAL_Constants import FLY_NUM, FLY_AVG_AREA, MODEL_SHAPE, MODEL_SHAPE_EXTEND, FEAT_SCALE_NORMAL, DURATION_LIMIT, \
-    START_FRAME, FRAME_STEP, IMG_PROCESS_NUM, IMG_PROCESS_CAPACITY, FIX_VIDEO_SIZE
+from SoAL_Constants import FLY_NUM, FLY_AVG_AREA, MODEL_SHAPE, MODEL_SHAPE_EXTEND, SCALE_NORMAL, DURATION_LIMIT, \
+    START_FRAME, FRAME_STEP
 from SoAL_Bkg import norm_subbg, remove_bg3, calc_bg
-from multiprocessing import Queue, Process
 
-FIX_SHAPE = []#[58, 58]  # test: need change according to fly size in video
-CENTER_UNIFORM_RANGE = 0.2  # NOTE: fill center range by median (0=close)
+FIX_SHAPE = MODEL_SHAPE#[58, 58]  # test: need change according to fly size in video
+CENTER_UNIFORM_RANGE = 0#0.2  # NOTE: fill center range (food) by median (0=close)
 CENTER_PAD = (1 - CENTER_UNIFORM_RANGE) / 2
 # cv2.setNumThreads(1)
 
@@ -28,14 +27,14 @@ class RegionSeg(object):
         self._task_id = task_id
         self._pred_q = pred_q
         self._video = video
-        self._meta = load_dict(video.replace(".avi", "_meta.txt"))
+        self._meta = load_dict(video.replace(".avi", "_config.json"))
         self._total_frame = min(DURATION_LIMIT * self._meta["FPS"], self._meta["total_frame"]) or self._meta["total_frame"]
         self._bg_filename = video.replace(".avi", ".bmp")
 
         self._gray_thresh = self._meta.get("GRAY_THRESHOLD")
-        self._feat_scale = self._meta.get("FEAT_SCALE")
+        self._scale_factor = self._meta.get("SCALE")
         self._roi = [r["roi"] for r in self._meta.get("ROI")]
-        self._avg_area = self._feat_scale ** 2 * FLY_AVG_AREA
+        self._avg_area = self._scale_factor ** 2 * FLY_AVG_AREA
         self._max_area = self._avg_area * FLY_NUM * 2
         self._min_area = self._avg_area / 3
         self._model_shape = MODEL_SHAPE
@@ -47,15 +46,15 @@ class RegionSeg(object):
         self.init_edge_mask()
 
     def init_model_shape(self):
-        if abs(self._feat_scale - FEAT_SCALE_NORMAL) > 2:
+        if abs(self._scale_factor - SCALE_NORMAL) > 2:
             """ video scale != train video scale
                 just change input size, scale video is not necessary
             """
-            print("shape not equal !!! %f %s need fix shape:" % (self._feat_scale, self._video))
+            print("shape not equal !!! %f %s need fix shape:" % (self._scale_factor, self._video))
             # self.shape_error = True
-            s = FEAT_SCALE_NORMAL / self._feat_scale
+            s = SCALE_NORMAL / self._scale_factor
             self._model_shape = FIX_SHAPE or [int(MODEL_SHAPE[0] / s), int(MODEL_SHAPE[1] / s)] #[48,48]#
-            self._model_shape_extend = (int(self._model_shape[0] * 1.5), int(self._model_shape[1] * 1.5))
+            self._model_shape_extend = (int(self._model_shape[0] * 1.8), int(self._model_shape[1] * 1.8))
             if FIX_SHAPE:
                 print("!!!fix_shape=", FIX_SHAPE)
             else:
@@ -80,29 +79,27 @@ class RegionSeg(object):
             inst.proc_video()
 
     @staticmethod
-    def process_sub(video, task_id, pred_q, input_q):  # NOTE: diff
+    def process_sub(video, task_id, pred_q, input_q):
         inst = RegionSeg(video, task_id, pred_q)
         inst.init_bg()
-        finish = False
-        while not finish:
-            l = input_q.qsize()
-            if not l:
-                l = 1
-            for i in range(l):
-                pack = input_q.get()
-                if pack is None:
-                    finish = True
-                    break
-                inst.proc_img2(*pack)
+        while True:
+            pack = input_q.get()
+            if pack is None:
+                break
+            inst.proc_img2(*pack)
 
     # @profile
     def proc_video(self):
-        input_q_l = []  # NOTE: diff
-        for i in range(IMG_PROCESS_NUM):  # NOTE: sub processes call proc_img2
-            input_q = Queue(maxsize=IMG_PROCESS_CAPACITY)
-            input_q_l.append(input_q)
-            rs_p = Process(target=RegionSeg.process_sub, args=(self._video, self._task_id, self._pred_q, input_q))
-            rs_p.start()
+        # from queue import Queue
+        # from threading import Thread
+        # input_q_l = []
+        # for i in range(IMG_PROCESS_NUM):  # NOTE: sub processes call proc_img2
+        #     input_q = Queue(maxsize=IMG_PROCESS_CAPACITY)
+        #     input_q_l.append(input_q)
+        #     rs_p = Thread(target=RegionSeg.process_sub, args=(self._video, self._task_id, self._pred_q, input_q))
+        #     rs_p.start()
+
+        self.init_bg()
 
         self._cap = cv2.VideoCapture(self._video)
         if not os.path.exists(self._bg_filename):
@@ -110,35 +107,27 @@ class RegionSeg(object):
             cv2.imwrite(self._bg_filename, img_bg)
         self._ts = time.time()
         self._start_ts = self._ts
-        print("[region_seg]#%d ---start: %d frames" % (self._task_id, self._total_frame))
-        # iter_frame(self._cap, self._total_frame, self.proc_img)
+        print("[BodyDetection]#%d ---start: %d frames" % (self._task_id, self._total_frame))
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, START_FRAME)
-        # pool = Pool(POOL_SIZE) # NOTE: apply_async only support staticmethod
         if FRAME_STEP:
-            for seq in range(START_FRAME, self._total_frame, FRAME_STEP):
-                self._cap.set(cv2.CAP_PROP_POS_FRAMES, seq)
-                ret, img = self._cap.read()
-                if not ret:
-                    print("read video error: " + self._video)
-                    self._pred_q.put([self._task_id, None, seq, 0, None, 0])
-                    break
-                # self.proc_img2(img[:, :, 1], seq)
-                input_q_l[seq % IMG_PROCESS_NUM].put([img[:, :, 1], seq])  # NOTE: diff
+            seq_range = range(START_FRAME, self._total_frame, FRAME_STEP)
         else:
-            for seq in range(START_FRAME, self._total_frame):
-                ret, img = self._cap.read()
-                if not ret:
-                    print("read video error: " + self._video)
-                    self._pred_q.put([self._task_id, None, seq, 0, None, 0])
-                    break
-                # self.proc_img2(img[:, :, 1], seq)
-                input_q_l[seq % IMG_PROCESS_NUM].put([img[:, :, 1], seq])  # NOTE: diff
+            seq_range = range(START_FRAME, self._total_frame)
 
-        for i in range(IMG_PROCESS_NUM):  # NOTE: end subprocess
-            input_q_l[i].put(None)
+        for seq in seq_range:
+            ret, img = self._cap.read()
+            if not ret:
+                print("read video error: " + self._video)
+                self._pred_q.put([self._task_id, None, seq, 0, None, 0])
+                break
+            self.proc_img2(img[:, :, 1], seq)
+            # input_q_l[seq % IMG_PROCESS_NUM].put([img[:, :, 1], seq])
+
+        # for i in range(IMG_PROCESS_NUM):  # NOTE: end subprocess
+        #     input_q_l[i].put(None)
 
         d = time.time() - self._start_ts
-        print("[region_seg]#%d ---finish: (%.2f/%.2f=%.2fframe/s)" % (self._task_id, self._total_frame, d, self._total_frame / d))
+        print("[BodyDetection]#%d ---finish: (%.2f/%.2f=%.2fframe/s)" % (self._task_id, self._total_frame, d, self._total_frame / d))
 
     def measure_regionprops(self, sub_bin, roi):
         label_img = measure.label(sub_bin, connectivity=2)
@@ -193,7 +182,7 @@ class RegionSeg(object):
                     if self._min_area < area < self._max_area:
                         center, axes, orient = cv2.fitEllipse(c)
                         if abs(center[1]) > sh[0] or abs(center[0]) > sh[1]:  # NOTE: fitEllipse result abnormal
-                            print("[region_seg]#%d center out of roi !!! frame:%d roi:%d" % (self._task_id, i, frame))
+                            print("[BodyDetection]#%d center out of roi !!! frame:%d roi:%d" % (self._task_id, i, frame))
                             cv2.imwrite("temp/error%d.png" % frame, img_no_bg)
                             roi_regions = self.measure_regionprops(sub_bin, roi)
                             break
@@ -208,7 +197,7 @@ class RegionSeg(object):
             if region_n < FLY_NUM:  # need gmm
                 roi_regions = self.gmm_seg(sub_bin, roi[0])  # PROFILE
                 if roi_regions is None:
-                    print("[region_seg]#%d gmm_seg found nothing !!! (video %s, roi %d, frame %d)" % (self._task_id, self._video, i, frame))
+                    print("[BodyDetection]#%d gmm_seg found nothing !!! (video %s, roi %d, frame %d)" % (self._task_id, self._video, i, frame))
                     cv2.imwrite("temp/error%d.png" % frame, img_roi_n)
                     roi_regions = []
                     for fly in range(FLY_NUM):
@@ -218,8 +207,10 @@ class RegionSeg(object):
                 roi_regions = roi_regions[:FLY_NUM]
             for reg in roi_regions:
                 img_center = center_img(img_no_bg, reg[1], reg[2], self._model_shape, self._model_shape_extend)  # PROFILE
-                img_center = self.preproc_img_center(img_center, self._gray_thresh)
-                self._pred_q.put([self._task_id, img_center.astype(np.uint8), frame, i, reg, region_n])
+                # img_center = self.preproc_img_center(img_center, self._gray_thresh)
+                # img_center = self._trans.transform(img_center.astype(np.uint8))
+                img_center = img_center.astype(np.uint8)
+                self._pred_q.put([self._task_id, img_center, frame, i, reg, region_n])
             # cv2.imwrite("temp/img_center-%d_%d_%d.png" % (self._task_id, i, frame), img_center)  # test output bg
             # cv2.imwrite("temp/sub_bin-%d_%d_%d.png" % (self._task_id, i, frame), sub_bin*255)
         # plot_regions(img, roi_regions)
@@ -294,9 +285,10 @@ class RegionSeg(object):
         # plt.show()
         return ret
 
-    def proc_one_img(self, img, roi, i, proc_center=True, no_center_img=False):
+    def proc_one_img(self, img, roi, i, proc_center=False, no_center_img=False):
         # NOTE: need self.init_bg()
-        img_roi = img[roi[0][1]:roi[1][1], roi[0][0]:roi[1][0]][:, :, 1]
+        img_roi = img[roi[0][1]:roi[1][1], roi[0][0]:roi[1][0]]
+        img_roi = cv2.cvtColor(img_roi, cv2.COLOR_BGR2GRAY)
         img_roi_n = remove_bg3(img_roi, self._l_img_bg_cu[i])
         img_no_bg = remove_bg3(img_roi, self._l_img_bg_f[i])
         sh = img_roi_n.shape
@@ -309,7 +301,7 @@ class RegionSeg(object):
                 if self._min_area < area < self._max_area:
                     center, axes, orient = cv2.fitEllipse(c)
                     if center[0] > sh[0] or center[1] > sh[1]:  # NOTE: fitEllipse result abnormal
-                        print("[region_seg] center out of roi !!!")
+                        print("[BodyDetection] center out of roi !!!")
                         roi_regions = self.measure_regionprops(sub_bin, roi)
                         break
                     # print("center:",frame, center)
@@ -416,7 +408,7 @@ def main():
     # os.system("pause")
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
 # kernprof.exe -l .\SoAL_BodyDetection.py "D:\exp\video_todo\20190902_150503_A\20190902_150503_A.avi"
 # python -m line_profiler .\SoAL_BodyDetection.py.lprof

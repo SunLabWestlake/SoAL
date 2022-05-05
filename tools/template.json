@@ -1,0 +1,27 @@
+{
+    "info": {
+        "description": "SunLab Drosophila Pose Dataset",
+        "url": "video:roi:frame:fly",
+        "version": "1.1",
+        "year": 2021,
+        "contributor": "Jing Ning",
+        "scorers": "",
+        "date_created": "2021/01/27"
+    },
+    "licenses": [
+        {
+            "url": "",
+            "id": 1,
+            "name": "Attribution-NonCommercial-ShareAlike License"
+        }
+    ],
+    "images": [],
+    "annotations": [],
+    "categories": [
+        {
+            "supercategory": "Drosophila",
+            "id": 1,
+            "name": "Drosophila"
+        }
+    ]
+}

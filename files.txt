@@ -1,0 +1,10 @@
+SoAL_source file list
+
+requirements.txt: List the required Python packages. Can be called by "pip".
+SoAL_xxx.py: Executabel Python scripts of SoAL
+	SoAL_PreProcess.py: The script for preprocessing the videos. Including scale factor setting, ROI extraction, background subtraction, and fly segmentation.
+	SoAL_KptDetect.py: The script for keypoint detection.
+	SoAL_ID_Anno.py: The script for identity assignment and behavior annotation.
+	SoAL_CirVis.py: The script for visualization of circling and wing extension.
+hrnet: HRNet source code
+tools: Python scripts for dataset generation (SoAL_DatasetUtils.py, SoAL_DatasetGen.py), manual labeling (SoAL_LabelUI.py), anti-distortion (calib), and results inspecting (SoAL_ViewKptUI.py, SoAL_ViewMotParaUI.py).
