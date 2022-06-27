@@ -10,11 +10,14 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import NoNorm
-from matplotlib.widgets import Button, TextBox, Slider, CheckButtons, RadioButtons
+from matplotlib.widgets import Button, TextBox, Slider, CheckButtons, RadioButtons, Cursor
 
 from SoAL_Constants import *
 from SoAL_Bkg import calc_bg, sub_img, remove_bg3
 
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['font.size'] = "6.0"
 
 def read_frame(cap, seq):
     cap.set(cv2.CAP_PROP_POS_FRAMES, seq)
@@ -34,8 +37,8 @@ def replace_text_00(t):
 def replace_text_box_00(t):
     t.set_val(t.text.replace("\x00", ""))
 
-def make_text_box(coord, label="", initial="", on_submit=None):
-    txt_box = TextBox(plt.axes(coord), label, initial=initial)
+def make_text_box(coord, label="", initial="", on_submit=None, color="1"):
+    txt_box = TextBox(plt.axes(coord), label, initial=initial, label_pad=0.06, color=color)
     on_submit and txt_box.on_submit(on_submit)
     return txt_box
 
@@ -48,8 +51,8 @@ class InputExpInfoUI(object):
         self.img = None
         self.SCALE = 0
 
-        self.fig, self.ax = plt.subplots(num=name, figsize=figsize)
-        plt.subplots_adjust(top=0.95, bottom=0.3)
+        self.fig, self.ax = plt.subplots(num=name, figsize=figsize, dpi=300)
+        plt.subplots_adjust(top=0.95, bottom=0.32)
 
         self.cap = cap
         self.exp_info = info
@@ -58,15 +61,15 @@ class InputExpInfoUI(object):
         self.height = info["height"]
 
         # all widgets must have a variable
-        self.txt_exp_date = make_text_box([0.25, 0.2, 0.1, 0.05], "exp_date", info.get("exp_date", day2str(datetime.now())), lambda e: None)
-        self.txt_female_date = make_text_box([0.5, 0.2, 0.1, 0.05], "female_date", info.get("female_date", day2str(datetime.now() + timedelta(days=-6))))
-        self.txt_temperature = make_text_box([0.75, 0.2, 0.1, 0.05], "temperature", str(info.get("temperature", 22)))
-        self.txt_box = make_text_box([0.75, 0.12, 0.1, 0.05], "two_point_len (mm)", str(self.two_point_len), self.on_txt_len)
-        self.txt_scale_factor = make_text_box([0.25, 0.12, 0.1, 0.05], "scale (px/mm)")
+        self.txt_exp_date = make_text_box([0.3, 0.26, 0.17, 0.05], "ExpDate", info.get("exp_date", day2str(datetime.now())), lambda e: None)
+        self.txt_female_date = make_text_box([0.3, 0.19, 0.17, 0.05], "FemaleDoB", info.get("female_date", day2str(datetime.now() + timedelta(days=-6))))
+        self.txt_temperature = make_text_box([0.3, 0.12, 0.17, 0.05], "Temperature", str(info.get("temperature", 22)))
+        self.txt_box = make_text_box([0.75, 0.19, 0.14, 0.05], "Diameter (mm)", str(self.two_point_len), self.on_txt_len)
+        self.txt_scale_factor = make_text_box([0.75, 0.12, 0.14, 0.05], "Scale (px/mm)", color="0.8")
 
-        self.btn_random = Button(plt.axes([0.1, 0.04, 0.1, 0.05]), "random")
+        self.btn_random = Button(plt.axes([0.24, 0.02, 0.23, 0.08]), "NextFrame", color="lightyellow")
         self.btn_random.on_clicked(self.on_click_random)
-        self.btn_confirm = Button(plt.axes([0.8, 0.04, 0.1, 0.05]), "confirm")
+        self.btn_confirm = Button(plt.axes([0.66, 0.02, 0.23, 0.08]), "Confirm", color="lightsteelblue")
         self.btn_confirm.on_clicked(self.on_click_btn_confirm)
         self.fig.canvas.mpl_connect('button_press_event', self.on_ax_press)
 
@@ -81,6 +84,7 @@ class InputExpInfoUI(object):
         self.refresh_fig()
 
     def show(self):
+        # cursor = Cursor(self.ax, useblit=True, color='red', linewidth=2)
         plt.show()
         
     def detect_circle(self, min_dist, min_radius, max_radius):
@@ -109,9 +113,6 @@ class InputExpInfoUI(object):
         self.refresh_fig()
 
     def on_click_btn_confirm(self, event):
-        if self.txt_female_date.text.endswith("X"):
-            print("input female date!")
-            return
         # self.refresh_fig()
         replace_text_box_00(self.txt_exp_date)
         replace_text_box_00(self.txt_female_date)
@@ -139,13 +140,15 @@ class InputExpInfoUI(object):
             self.refresh_fig()
 
     def refresh_fig(self):
+        print("refresh")
         self.ax.cla()
+        self.ax.axis("off")
         if self.point1 and self.point2:
             length = point_dist(self.point1, self.point2)
             self.SCALE = round(length / self.two_point_len, 2) if self.two_point_len else 0
-            self.ax.plot([self.point1[0], self.point2[0]], [self.point1[1], self.point2[1]], "b-o" if self.SCALE else "r-o")
+            self.ax.plot([self.point1[0], self.point2[0]], [self.point1[1], self.point2[1]], color="b" if self.SCALE else "r", lw=1, marker=".")
         else:
-            self.point1 and self.ax.plot([self.point1[0]], [self.point1[1]], "r-o")
+            self.point1 and self.ax.plot([self.point1[0]], [self.point1[1]], "r.")
             self.SCALE = 0
         self.ax.imshow(self.img, cmap=plt.cm.gray, norm=NoNorm())
 
@@ -160,8 +163,8 @@ class InputRoiInfoUI(object):
         self.circles = []
         self.fly_info_l = []
 
-        self.fig, self.ax = plt.subplots(num=name, figsize=figsize)
-        plt.subplots_adjust(top=0.95, bottom=0.3)
+        self.fig, self.ax = plt.subplots(num=name, figsize=figsize, dpi=300)
+        plt.subplots_adjust(top=0.95, bottom=0.32)
 
         self.cap = cap
         self.roi_info = info
@@ -189,16 +192,16 @@ class InputRoiInfoUI(object):
                 self.info_to_male_geno[f["info"]] = [f["male_geno"], f["male_date"], f["male_days"]]
 
         circle_param = "%d,%d,%d,%d" % (self.arena_radius_min, self.arena_radius_max, self.arena_min_dist, self.arena_extend)
-        self.txt_box = make_text_box([0.75, 0.12, 0.15, 0.05], "circle_param", circle_param, self.on_submit_shape)
-        self.txt_box_fly = make_text_box([0.1, 0.12, 0.5, 0.05], "fly_info", ",".join(self.fly_info_l), self.on_submit_fly_info)
-        self.shape_check = CheckButtons(plt.axes([0.1, 0.2, 0.15, 0.05]), ["is_round_roi"], [True])
+        self.shape_check = CheckButtons(plt.axes([0.12, 0.25, 0.28, 0.05]), ["IsRoundROI"], [True])
+        self.txt_box = make_text_box([0.65, 0.25, 0.26, 0.05], "CircleParam", circle_param, self.on_submit_shape)
+        self.txt_box_fly = make_text_box([0.25, 0.17, 0.66, 0.05], "FlyInfo", ",".join(self.fly_info_l), self.on_submit_fly_info)
         self.shape_check.on_clicked(self.on_click_shape)
 
-        self.btn_random = Button(plt.axes([0.1, 0.04, 0.1, 0.05]), "random")
+        self.btn_random = Button(plt.axes([0.1, 0.05, 0.23, 0.08]), "NextFrame", color="lightyellow")
         self.btn_random.on_clicked(self.on_click_random)
-        self.btn_clear = Button(plt.axes([0.22, 0.04, 0.1, 0.05]), "clear")
+        self.btn_clear = Button(plt.axes([0.35, 0.05, 0.23, 0.08]), "ClearROI", color="lightyellow")
         self.btn_clear.on_clicked(self.on_click_clear)
-        self.btn_confirm = Button(plt.axes([0.8, 0.04, 0.1, 0.05]), "confirm")
+        self.btn_confirm = Button(plt.axes([0.68, 0.05, 0.23, 0.08]), "Confirm", color="lightsteelblue")
         self.btn_confirm.on_clicked(self.on_click_btn_confirm)
         self.fig.canvas.mpl_connect('button_press_event', self.on_click_roi)
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_roi)
@@ -254,6 +257,7 @@ class InputRoiInfoUI(object):
 
     def refresh_fig(self):
         self.ax.cla()
+        self.ax.axis("off")
         self.ax.imshow(self.img, cmap=plt.cm.gray, norm=NoNorm())
         if not self.shape_check.get_status()[0]:  # rect
             for p in self.rois:
@@ -305,7 +309,7 @@ class InputRoiInfoUI(object):
             for idx, roi in enumerate(self.rois):
                 fly_info = self.fly_info_l[idx] if len(self.fly_info_l) > idx else ""
                 male_geno, male_date, male_days = self.get_male_geno_day(fly_info)
-                self.ax.text((roi[0][0]+roi[1][0])/2, (roi[0][1]+roi[1][1])/2, male_geno + "+" + str(male_days))
+                self.ax.text((roi[0][0]+roi[1][0])/2, (roi[0][1]+roi[1][1])/2, male_geno + "+" + str(male_days), horizontalalignment="center")
 
     def get_roi(self, x, y, e):
         x1 = max(0, int(x-e))
@@ -455,22 +459,27 @@ class InputBgInfoUI(object):
 
         n = len(self.rois)
         if n == 1:
-            self.fig, self.axes = plt.subplots(num=name, figsize=figsize)
+            self.fig, self.axes = plt.subplots(num=name, figsize=figsize, dpi=300)
             self.axes = [self.axes]
         else:
-            self.fig, self.axes = plt.subplots(4, 4, num=name, figsize=figsize)
+            self.fig, self.axes = plt.subplots(4, 4, num=name, figsize=figsize, dpi=300)
             self.axes = self.axes.flatten()
-        plt.subplots_adjust(top=0.95, bottom=0.3, left=0.1, hspace=0.01, wspace=0.01)
+        plt.subplots_adjust(top=0.96, bottom=0.32, hspace=0.02, wspace=0.02)
 
-        self.slider = Slider(plt.axes([0.1, 0.12, 0.8, 0.05]), "", valmin=0.0, valmax=255, valinit=self.GRAY_THRESHOLD)
+        # self.ax_h = plt.axes([0.2, 0.26, 0.65, 0.04])
+        # slider_axes = plt.axes([0.2, 0.15, 0.65, 0.04])
+        # radio_axes = plt.axes([0.35, 0.02, 0.21, 0.11])
+        self.ax_h = plt.axes([0.41, 0.24, 0.47, 0.06])
+        slider_axes = plt.axes([0.41, 0.12, 0.47, 0.05])
+        radio_axes = plt.axes([0.1, 0.12, 0.19, 0.16])
+        self.slider = Slider(slider_axes, "", valmin=0.0, valmax=255, valinit=self.GRAY_THRESHOLD)
         self.slider.on_changed(self.on_slider)
-        self.rad_binary = RadioButtons(plt.axes([0.22, 0.01, 0.12, 0.1]), ["binary", "foreground", "origin"], 0, "k")
+        self.rad_binary = RadioButtons(radio_axes, ["Original", "NoBkg", "Binary"], 0, "k")
         self.rad_binary.on_clicked(self.on_click_binary)
-        self.btn_random = Button(plt.axes([0.1, 0.04, 0.1, 0.05]), "random")
+        self.btn_random = Button(plt.axes([0.1, 0.02, 0.23, 0.08]), "NextFrame", color="lightyellow")
         self.btn_random.on_clicked(self.on_click_random)
-        self.btn_confirm = Button(plt.axes([0.8, 0.04, 0.1, 0.05]), "confirm")
+        self.btn_confirm = Button(plt.axes([0.65, 0.02, 0.23, 0.08]), "Confirm", color="lightsteelblue")
         self.btn_confirm.on_clicked(self.on_click_confirm)
-        self.ax_h = plt.axes([0.1, 0.2, 0.8, 0.05])
 
         self.show_random_frame()
         self.refresh_fig()
@@ -528,9 +537,14 @@ class InputBgInfoUI(object):
             img_bg = sub_img(self.img_bg, roi)
             img_fg = remove_bg3(img, img_bg)
             data = img_fg < self.GRAY_THRESHOLD
-            if self.show_binary == "foreground":
+
+            #data = (img_fg < self.GRAY_THRESHOLD).astype(int) * 255
+            #img_fg = cv2.GaussianBlur(data.astype(np.uint8), (5, 5), 0)
+            #data = img_fg > 240  # DJZ
+
+            if self.show_binary == "NoBkg":
                 img = img_fg.astype(int)
-            elif self.show_binary == "binary":
+            elif self.show_binary == "Binary":
                 img = data.astype(float)
             ax = self.axes[i]
             ax.cla()

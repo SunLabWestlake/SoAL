@@ -10,10 +10,15 @@ import cv2
 from threading import Timer, Thread
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import ticker
 from matplotlib.colors import NoNorm
 from matplotlib.widgets import Slider
 sys.path.append(".")
 from SoAL_Utils import load_dict, load_dfs, load_dataframe
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['font.size'] = "12.0"
+FONT_SMALL = 12
 
 NEED_CONSOLE = False
 PLOT_MOT_LENGTH = 100
@@ -71,27 +76,27 @@ class ViewMotPara(object):
         self.roi_size = (self.roi[1][0] - self.roi[0][0], self.roi[1][1] - self.roi[0][1])
         self.roi_size_scale = (self.roi_size[0] / self.scale_factor, self.roi_size[1] / self.scale_factor)
 
+        self.fig, self.cap_ax = plt.subplots(figsize=(6, 3.5), num="+/-: next/previous circling")
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.95, bottom=0.2)  # , hspace=0.06, wspace=0.06)
+        self.slider_ax = plt.axes([0.1, 0.05, 0.78, 0.06])
+        self.slider = Slider(self.slider_ax, "", valmin=0, valmax=self.total_frame - 1, valfmt="%d", valinit=0)
+        self.slider.on_changed(self.on_slider)
+        self.fig.canvas.mpl_connect("key_press_event", self.onkey)
+        self.fig.canvas.mpl_connect("close_event", self.onclose)
+        self.set_window_pos(500, 0)
+
         fig0, ax0 = plt.subplots(len(mot_para0_keys) + len(mot_para1_keys), 1, sharex=True, figsize=(6, 8), num="motion parameters")
-        plt.subplots_adjust(hspace=0.2, top=0.99, bottom=0.04, right=0.96)
-        self.set_window_pos(0, 0)
+        plt.subplots_adjust(hspace=0.5, top=0.99, bottom=0.04, right=0.8)
+        self.set_window_pos(500, 380)
         fig0.canvas.mpl_connect("button_press_event", self.on_click_mot)
         fig0.canvas.mpl_connect("key_press_event", self.onkey)
         fig0.canvas.mpl_connect("close_event", self.onclose)
         self.axes = [ax0]
         self.figs = [fig0]
 
-        self.fig, self.cap_ax = plt.subplots(figsize=(6, 8), num="+/-: next/previous circling")
-        plt.subplots_adjust(left=0.1, right=0.9, top=0.95, bottom=0.17)  # , hspace=0.06, wspace=0.06)
-        self.slider_ax = plt.axes([0.1, 0.05, 0.78, 0.03])
-        self.slider = Slider(self.slider_ax, "", valmin=0, valmax=self.total_frame - 1, valfmt="%d", valinit=0)
-        self.slider.on_changed(self.on_slider)
-        self.fig.canvas.mpl_connect("key_press_event", self.onkey)
-        self.fig.canvas.mpl_connect("close_event", self.onclose)
-        self.set_window_pos(600, 0)
-
     def set_window_pos(self, x, y):
         mngr = plt.get_current_fig_manager()
-        mngr.window.wm_geometry("+%d+%d" % (x+500, y+200))
+        mngr.window.wm_geometry("+%d+%d" % (x, y))
 
     def plot_one_frame(self):
         # video
@@ -123,7 +128,7 @@ class ViewMotPara(object):
                     self.cap_ax.scatter(xs, ys, c=np.arange(0, 1, 1/(frame_count+1))[:frame_count], s=1, cmap="viridis" if i == 1 else "autumn")
 
         t_sec = self.frame / self.cap_fps
-        self.slider_ax.set_title("%02d:%02.2f" % (t_sec / 60, t_sec % 60), fontsize=20)#set_xlabel(
+        # self.slider_ax.set_title("%02d:%02.2f" % (t_sec / 60, t_sec % 60))#set_xlabel(
         self.cap_ax.set_title(self.pair)
         print("#%d" % self.frame)
 
@@ -136,6 +141,7 @@ class ViewMotPara(object):
         self.cap_ax.plot([x+dx1, x+dx2, x-dx1, x-dx2, x+dx1], [y+dy1, y+dy2, y-dy1, y-dy2, y+dy1], linewidth=0.5, c=c)
 
     def plot_mot_para(self):
+        print("refresh")
         half = PLOT_MOT_LENGTH / 2
         center = np.clip(self.frame, half, self.total_frame - half)
         x_range = (int(center - half), int(center + half))
@@ -152,13 +158,19 @@ class ViewMotPara(object):
 
                 if mot_para.get(k) is not None:
                     ax.plot(mot_para[k][x_range[0]:x_range[1]], lw=0.6, label="%s %.2f" % (k, f[k]), color="b" if idx == 1 else "k")
+                    ax.text(1, 1, "%s %.2f" % (k, f[k]), transform=ax.transAxes, color="b" if idx == 1 else "k", verticalalignment="top")
+
                     # ax.scatter([self.frame], [f[k]], color="b", marker=".", s=1)
                     if idx == 1:
                         ax.plot(self.dfs[2][k][x_range[0]:x_range[1]], lw=0.4, label="%s %.2f" % (k, f2[k]), c="r")
-                        # ax.scatter([self.frame], [f2[k]], color="r", marker=".", s=1)
-                    ax.legend(loc="upper right", fontsize="x-small")
+                        ax.text(1, 1, " \n%s %.2f" % (k, f2[k]), transform=ax.transAxes, color="r", verticalalignment="top")
+                    # ax.legend(loc="upper right", fontsize="5")
+
                     ax.axvline(self.frame, color="k", lw=0.4, alpha=0.6)
-                ax.tick_params(axis='y', labelsize="x-small")
+                    ymax, ymin = ax.get_ylim()[1], ax.get_ylim()[0]
+                    ax.yaxis.set_major_locator(ticker.MultipleLocator((ymax-ymin)/2))
+                ax.tick_params(axis='x', labelsize=FONT_SMALL)
+                ax.tick_params(axis='y', labelsize=FONT_SMALL)
                 ax.spines['top'].set_visible(False)
                 ax.spines['right'].set_visible(False)
                 i += 1

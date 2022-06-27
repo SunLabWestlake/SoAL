@@ -12,9 +12,12 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 sys.path.append(".")
 from tools.SoAL_DatasetUtils import *
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['font.size'] = "6.0"
 
 DRAW_KEYPOINT_TEXT = True
-COLOR = [*"rgbycrgbycrgbyc"][:NUM_KEYPOINTS]
+COLOR = [*"yrmgkyrmkgyrmkg"][:NUM_KEYPOINTS]
 MARKER = [*"x+.,*"]
 TOOLS = ["", "draw bbox", "draw keypoints"]
 DEFAULT_TOOL = 2 if CENTERED else 1
@@ -47,9 +50,9 @@ class LabelUI(object):
         self.bbox_centered = [0, 0, self.images[1]["width"], self.images[1]["height"]]
         self.area = self.images[1]["width"] * self.images[1]["height"]
 
-        self.fig, self.ax = plt.subplots(figsize=(6, 4), num=img_folder)
-        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)#, hspace=0.06, wspace=0.06)
-        self.slider_ax = plt.axes([0.1, 0.05, 0.78, 0.03])
+        self.fig, self.ax = plt.subplots(figsize=(1.9, 1.7), num=img_folder, dpi=300)
+        plt.subplots_adjust(left=0.11, right=0.95, top=0.9, bottom=0.25)#, hspace=0.06, wspace=0.06)
+        self.slider_ax = plt.axes([0.14, 0.08, 0.68, 0.05])
         self.slider = Slider(self.slider_ax, "", valmin=0, valmax=self.total_frame - 1, valfmt="%d", valinit=0)
         self.slider.on_changed(self.on_slider)
         self.fig.canvas.mpl_connect('key_press_event', self.onkey)
@@ -81,7 +84,7 @@ class LabelUI(object):
         self.ax.cla()
         self.ax.imshow(self.img_gray)#, cmap=plt.cm.gray, norm=NoNorm(), extent=(0, self.roi_size_scale[0], 0, self.roi_size_scale[1]))
         img_id = self.images[self.frame]["id"]
-        self.slider_ax.set_xlabel("%d:%s" % (self.frame, img_id))
+        # self.slider_ax.set_xlabel("%d:%s" % (self.frame, img_id))
         print("#%d" % self.frame)
         self.plot_fly_info()
         self.ax.set_xlim(self.bbox_centered[0], self.bbox_centered[2])
@@ -122,6 +125,20 @@ class LabelUI(object):
     def cur_ann(self):
         return self.cur_ann_l[self.fly_id - 1]
 
+    def save_label(self):
+        ann = self.cur_ann()
+        l, b, w, h = ann["bbox"]
+        plt.figure("t", figsize=(3, 2), dpi=300)
+        ax = plt.gca()
+        ax.cla()
+        ax.axis("off")
+        ax.imshow(self.img_gray)
+        ax.add_patch(plt.Rectangle(xy=(l-1, b-1), width=max(1, w), height=max(1, h), edgecolor="k", fill=False, lw=1))
+        keypoints = np.array(ann["keypoints"]).reshape([-1, 3])[:NUM_KEYPOINTS]
+        ax.scatter(keypoints[:, 0], keypoints[:, 1], c="w", marker="o", s=100)
+        ax.scatter(keypoints[:, 0], keypoints[:, 1], c=COLOR, marker="o", s=50)
+        plt.savefig(r"label_example\%d.png" % self.frame)
+
     def plot_fly_info(self):
         self.plot_fly_keypoints(self.cur_ann(), self.fly_id - 1)
         ann_l = self.cur_ann_l
@@ -144,15 +161,15 @@ class LabelUI(object):
                 t = "%d" % (idx + 1)
             else:
                 t = self.cat_d.get(cid, {}).get("name", cid)
-            self.ax.text(l, b, t, color=color or COLOR[idx % 5])
+            # self.ax.text(l, b, t, color=color or COLOR[idx % 5])
         if ann.get("keypoints"):
             keypoints = np.array(ann["keypoints"]).reshape([-1, 3])[:NUM_KEYPOINTS]
-            self.ax.scatter(keypoints[:, 0], keypoints[:, 1], c="w", marker=MARKER[idx % 5], s=120)
-            self.ax.scatter(keypoints[:, 0], keypoints[:, 1], c=color or COLOR, marker="+", s=100)
+            self.ax.scatter(keypoints[:, 0], keypoints[:, 1], c="w", marker=MARKER[idx % 5], s=60, lw=0.8)
+            self.ax.scatter(keypoints[:, 0], keypoints[:, 1], c=color or COLOR, marker="+", s=40, lw=0.8)
             if DRAW_KEYPOINT_TEXT:
                 for i, kpt in enumerate(keypoints):
-                    self.ax.text(kpt[0]+2, kpt[1], str(i+1), color="w", fontsize=20)
-                    self.ax.text(kpt[0]+2, kpt[1]+0.1, str(i+1), color=color or COLOR[i], fontsize=20)
+                    self.ax.text(kpt[0]+2, kpt[1], str(i+1), color="w", fontsize=12)
+                    self.ax.text(kpt[0]+2, kpt[1]+0.2, str(i+1), color=color or COLOR[i], fontsize=12)
 
     def copy_last_ann(self):
         img_id = self.images[self.frame - 1]["id"]
@@ -340,7 +357,7 @@ class LabelUI(object):
         elif event.key == ",":
             # self.change_tool(2 if self.tool == 1 else 1)
             # self.refresh_title()
-            self.print_img_norm_config()
+            self.save_label()
             return
         elif event.key == "`":
             self.change_tool_step(self.tool_step - 1)

@@ -444,7 +444,7 @@ class COCODataset(JointsDataset):
         coco_dt = self.coco.loadRes(res_file)
         coco_eval = COCOeval(self.coco, coco_dt, 'keypoints')
         coco_eval.params.useSegm = None
-        coco_eval.params.kpt_oks_sigmas = np.array([0.05]*self.num_joints)  # TODO: modify according to human variance
+        coco_eval.params.kpt_oks_sigmas = np.array([0.0484706, 0.04405172, 0.05322594, 0.06825248, 0.06946414])#[0.05]*self.num_joints)  # TODO: modify according to human variance
         coco_eval.evaluate()
         coco_eval.accumulate()
         coco_eval.summarize()

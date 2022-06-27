@@ -7,7 +7,7 @@ Author: Jing Ning @ SunLab
 import os
 import time
 from datetime import datetime
-from SoAL_Constants import DURATION_LIMIT, PRINT_FRAME_WRITE, MODEL_CONFIG
+from SoAL_Constants import DURATION_LIMIT, PRINT_FRAME_WRITE, MODEL_CONFIG, START_FRAME
 from SoAL_Utils import load_dict, save_dict, to_kpt_s, KPT_HEADER
 
 
@@ -19,7 +19,7 @@ class WriteKpt(object):
         self._task_q = task_q
         self._meta = load_dict(video.replace(".avi", "_config.json"))
         self._total_frame = min(DURATION_LIMIT * self._meta["FPS"], self._meta["total_frame"]) or self._meta["total_frame"]
-        self._max_frame = self._total_frame - 1
+        self._max_frame = self._total_frame - START_FRAME - 1
         roi_l = self._meta.get("ROI")
         self._max_fly = self._max_frame * len(roi_l) * 2
         self._roi = [r["roi"] for r in roi_l]
@@ -84,7 +84,7 @@ class WriteKpt(object):
 
         end_ts = time.time()
         d = end_ts - start_ts
-        finish_s = "#%d (%d(%d)/%.2fs=%.2fframe/s)\n" % (self._task_id, frame, self._total_frame, d, frame / d) + datetime.strftime(datetime.now(), "%Y%m%d %H:%M:%S")
+        finish_s = "#%d (%d(%d)/%.2fs=%.2fframe/s)\n" % (self._task_id, frame-START_FRAME, self._total_frame, d, (frame-START_FRAME) / d) + datetime.strftime(datetime.now(), "%Y%m%d %H:%M:%S")
         print("[WriteKpt]---finish: %s %s" % (finish_s, self._video))
 
         state_file = os.path.join(os.path.dirname(self._video), ".state")

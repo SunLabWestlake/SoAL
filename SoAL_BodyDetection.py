@@ -127,7 +127,7 @@ class RegionSeg(object):
         #     input_q_l[i].put(None)
 
         d = time.time() - self._start_ts
-        print("[BodyDetection]#%d ---finish: (%.2f/%.2f=%.2fframe/s)" % (self._task_id, self._total_frame, d, self._total_frame / d))
+        print("[BodyDetection]#%d ---finish: (%.2f/%.2f=%.2fframe/s)" % (self._task_id, self._total_frame-START_FRAME, d, (self._total_frame-START_FRAME) / d))
 
     def measure_regionprops(self, sub_bin, roi):
         label_img = measure.label(sub_bin, connectivity=2)

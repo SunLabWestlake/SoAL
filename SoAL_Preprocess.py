@@ -96,18 +96,18 @@ def input_meta_info(video, cap, info=None):
 
     print("input_exp_info...", video)
     # SCALE, AREA_RANGE, temperature, female_date, female_days
-    ui_exp = InputExpInfoUI("input_exp_info", (9, 8), cap, static_info)
+    ui_exp = InputExpInfoUI("input_exp_info", (2.4, 2.5), cap, static_info)
     ui_exp.show()
 
     print("input_roi_info...", video)
     # idx, fly_id, {roi(2x2)}, {male_geno}, {male_date}, male_days
-    ui_roi = InputRoiInfoUI("input_roi_info", (9, 8), cap, ui_exp.exp_info)
+    ui_roi = InputRoiInfoUI("input_roi_info", (2.4, 2.5), cap, ui_exp.exp_info)
     ui_roi.show()
 
     print("input_bg_info...", video)
     # bg, GRAY_THRESHOLD
     bg_filename = video.replace(".avi", ".bmp")
-    ui_bg = InputBgInfoUI("input_bg_info", (9, 8), cap, ui_roi.roi_info, bg_filename)
+    ui_bg = InputBgInfoUI("input_bg_info", (2.4, 2.5), cap, ui_roi.roi_info, bg_filename)
     ui_bg.show()
 
     save_dict(meta, ui_bg.bg_info)
@@ -125,12 +125,9 @@ def get_video_static_info(video, cap):
     info["ROUND_ARENA"] = ROUND_ARENA
     info["MODEL_FOLDER"] = MODEL_CONFIG
 
-    log = video.replace(".avi", ".log")
-    if not os.path.exists(video):
-        logs = find_file(os.path.dirname(video), ".log")
-        if not logs:
-            return
-        log = logs[0]
+    log = video.replace(".avi", "_v.log")
+    if not os.path.exists(log):
+        log = video.replace(".avi", ".log")
     if os.path.exists(log):
         logf = open(log, "r")
         first_frame = None
@@ -139,14 +136,18 @@ def get_video_static_info(video, cap):
             if line.startswith("camera:"):
                 info["camera"] = line.split()[-1]
             elif line.startswith("start:") or line.startswith("begin"):
-                info["start"] = line.split()[-1]
+                tt = line.split()
+                if tt[-1].find(":") > 0:
+                    info["start"] = tt[-1]
+                else:
+                    info["start"] = tt[-2]
             elif line.find(":") < 0 and first_frame is None:
                 first_frame = int(line.split()[0])
         logf.close()
         logf = open(log, "rb")
         logf.seek(-50, 2)
         lines = logf.readlines()
-        last_line = str(lines[-1], encoding="utf-8").split()
+        last_line = str(lines[-2], encoding="utf-8").split()
         last_ts = last_line[-1]
         if first_frame is not None:
             last_frame = int(last_line[0])

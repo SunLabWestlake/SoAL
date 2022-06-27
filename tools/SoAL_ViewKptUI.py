@@ -9,6 +9,9 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 from matplotlib.colors import NoNorm
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['font.size'] = "6.0"
 
 sys.path.append(".")
 from SoAL_Constants import FIX_VIDEO_SIZE, FLY_NUM
@@ -218,9 +221,9 @@ def save_all_frame():
             # plt.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0, hspace=0)
 
             ax1.axis("off")
-            plot_centric_fly(ax1, 1, track, img_gray, lw=1, s=50)
+            plot_centric_fly(ax1, 1, track, img_gray, lw=1)
             ax2.axis("off")
-            plot_centric_fly(ax2, 2, track, img_gray, lw=1, s=50)
+            plot_centric_fly(ax2, 2, track, img_gray, lw=1)
             # plt.savefig("temp1/%d.jpg" % frame)
             # plt.close()
     if ax100 is not None:
@@ -277,7 +280,7 @@ def plot_video_frame(ax, frame, track, x, y):
         img_gray = img_gray[int(g_roi[0][1]):int(g_roi[1][1]), int(g_roi[0][0]):int(g_roi[1][0])]
         ax.cla()
         ax.imshow(img_gray, cmap=plt.cm.gray, norm=NoNorm())
-        ax.scatter(x + PLOT_OFFSET, y + PLOT_OFFSET, c="br" if FLY_NUM == 2 else "b", s=5, marker="o")
+        ax.scatter(x + PLOT_OFFSET, y + PLOT_OFFSET, c="br" if FLY_NUM == 2 else "b", s=1, marker=".")
         for fly in range(1, FLY_NUM+1):
             if track.get("%d:part:p0:x" % fly):
                 xs, ys = [], []
@@ -306,49 +309,23 @@ def plot_body_box(ax, x, y, d, h_maj, h_min, area, c):
 def plot_fly_info(ax, track, fly, color):
     x, y = track["%d:pos:x" % fly], track["%d:pos:y" % fly]
     dir = track["%d:dir" % fly]
-    # dir
     e_maj = track.get("%d:e_maj" % fly)
     rect = plt.Polygon(triangle_for_angle(dir, x, y, e_maj/2), color=color, alpha=0.3)
     ax.add_patch(rect)
-    # move
-    fly_move = track.get("%d:move_dir" % fly)
-    if fly_move is not None:
-        v_move = angle_to_vector(fly_move)
-        line_xs, line_ys = (v_move[0] + x, x), (v_move[1] + y, y)
-        ax.add_line(plt.Line2D(line_xs, line_ys, linewidth=0.2, color=color))
-
-        i_move = track.get("%d:i_move_dir" % fly)
-        v_move = angle_to_vector(i_move)
-        line_xs, line_ys = (v_move[0] + x, x), (v_move[1] + y, y)
-        ax.add_line(plt.Line2D(line_xs, line_ys, linewidth=0.2, color=color, alpha=0.5))
-        # print("mv_dir %d, i_mv_dir %d" % (fly_move, i_move))
-    # if e_maj:
-    #     line_xs, line_ys = line_for_angle2(dir, x, y, e_maj/2)
-    #     ax.add_line(plt.Line2D(line_xs, line_ys, marker=".", linewidth=0.5, color=color))
-    phi_l = track.get("phi%d_l" % fly)
-    fly_l = track.get("fly%d_l" % fly)
-    if phi_l and fly_l:
-        line_xs, line_ys = line_for_angle(dir + phi_l, x, y, -fly_l)
-        ax.add_line(plt.Line2D(line_xs, line_ys, marker=".", linewidth=0.5, color=color))
-    phi_r = track.get("phi%d_r" % fly)
-    fly_r = track.get("fly%d_r" % fly)
-    if phi_r and fly_r:
-        line_xs, line_ys = line_for_angle(dir - phi_r, x, y, -fly_r)
-        ax.add_line(plt.Line2D(line_xs, line_ys, marker=".", linewidth=0.5, color=color))
     if track.get("%d:point:xs" % fly):
         xs, ys = track["%d:point:xs" % fly], track["%d:point:ys" % fly]
-        ax.scatter(xs, ys, s=15, c="ywmkg", marker="o" if fly == 1 else "x")
+        ax.scatter(xs, ys, s=10, c="ywmkg", marker="o" if fly == 1 else "x", zorder=10)
 
         # print(angle_diff_dir((xs[0] - xs[1], ys[0] - ys[1]), (xs[2] - xs[1], ys[2] - ys[1])))
-        ax.plot(xs[:3], ys[:3], linewidth=0.4, c="k")
-        ax.plot(xs[1:4:2], ys[1:4:2], linewidth=0.4, c="k")
-        ax.plot(xs[1:5:3], ys[1:5:3], linewidth=0.4, c="k")
+        ax.plot(xs[:3], ys[:3], linewidth=0.4, c="k", zorder=1)
+        ax.plot(xs[1:4:2], ys[1:4:2], linewidth=0.4, c="k", zorder=1)
+        ax.plot(xs[1:5:3], ys[1:5:3], linewidth=0.4, c="k", zorder=1)
 
 def plot_two_fly_info(ax, track, x, y):
     # pos, dir, move_vector...
     ax.cla()
     ax.axis("equal")
-    ax.scatter(x, y, s=20, c="br" if FLY_NUM == 2 else "b", marker="o")
+    # ax.scatter(x, y, s=20, c="br" if FLY_NUM == 2 else "b", marker="o")
     plot_fly_info(ax, track, 1, "b")
     if FLY_NUM > 1:
         plot_fly_info(ax, track, 2, "r")
@@ -372,12 +349,12 @@ def get_centered_info2(pos1, dir1, pos2):
 
 MODEL_SHAPE = (64, 64)
 MODEL_SHAPE_EXTEND = (int(MODEL_SHAPE[0] * 1.5), int(MODEL_SHAPE[1] * 1.5))
-def plot_centric_fly(ax, fly, track, img, lw=4, s=95, marker="o"):
+def plot_centric_fly(ax, fly, track, img, lw=1, s=10, marker="o"):
     ax.axis("equal")
     pos = (track["%d:pos:x" % fly], track["%d:pos:y" % fly])
     img_ego = center_img(img, pos, track["%d:dir" % fly], MODEL_SHAPE, MODEL_SHAPE_EXTEND)
     ax.imshow(img_ego, cmap=plt.cm.gray, norm=NoNorm())
-    ax.scatter([MODEL_SHAPE[0]/2], [MODEL_SHAPE[1]/2], c="b" if fly==1 else "r")
+    # ax.scatter([MODEL_SHAPE[0]/2], [MODEL_SHAPE[1]/2], c="b" if fly==1 else "r", s=5)
     ax.add_patch(plt.Rectangle((0, 8), 64, 48, color="b" if fly==1 else "r", fill=False))
     if track.get("%d:point:xs" % fly):  # !!!!False
         xso, yso = track["%d:point:xs" % fly], track["%d:point:ys" % fly]
@@ -392,18 +369,20 @@ def plot_centric_fly(ax, fly, track, img, lw=4, s=95, marker="o"):
         ax.plot(xs[:3], ys[:3], linewidth=lw, c="w", zorder=2)
         ax.plot(xs[1:4:2], ys[1:4:2], linewidth=lw, c="w", zorder=2)
         ax.plot(xs[1:5:3], ys[1:5:3], linewidth=lw, c="w", zorder=2)
-        ax.scatter(xs, ys, s=s, c="ywmkg", marker=marker, zorder=10)
+        ax.scatter(xs, ys, s=s, c="ywmkg", marker=marker, zorder=15, lw=lw)
     # ax.invert_yaxis()
+    ax.set_xlim(0, 64)
+    ax.set_ylim(0, 64)
 
 def main(path):
     global g_track_info, g_cap, g_frame, g_slider, axes
     g_frame = 0
     init_track_info(path)
-    fig, axes = plt.subplots(1, 4, figsize=(15, 4.3))
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.21)
+    fig, axes = plt.subplots(1, 4, figsize=(4.5, 1.4), dpi=300)
+    plt.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.27, wspace=0.3)
     fig.canvas.mpl_connect('key_press_event', onkey)
     from matplotlib.widgets import Slider
-    g_slider = Slider(plt.axes([0.05, 0.05, 0.9, 0.05]), "", valmin=0, valmax=g_total_frame-1, valfmt="%d", valinit=0)
+    g_slider = Slider(plt.axes([0.05, 0.04, 0.88, 0.05]), "", valmin=0, valmax=g_total_frame-1, valfmt="%d", valinit=0)
     g_slider.on_changed(on_slider)
 
     plot_one_frame()
